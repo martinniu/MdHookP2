@@ -151,31 +151,37 @@ namespace Mon
         public string LOGPATH = Application.StartupPath + "\\日志";
         System.Timers.Timer timer_time = new System.Timers.Timer();
         System.Timers.Timer timer_bd = new System.Timers.Timer();
+        System.Timers.Timer timer_search = new System.Timers.Timer();
         public static object locker = new object();//添加一个对象作为锁
 
         //public List<string> Folders = new List<string>();
         //public int SearchSecs = 10;
         public bool Auto = true;
+        public string SerKey = "MirServer";
         public int MonSecs = 2;
-        public string DataPath = "";
+        public int SearchSecs = 10;
+        public List<string> Folders = new List<string>();
         public string SerSubPath = "Mir200\\Envir\\QuestDiary\\帐号担保";
         public string SPLIT = "`";
+        public string ToolPath = "远程账号管理工具.exe";
+        //使用公共工具
+        public bool PublicTool = false;
+        /// <summary>
+        /// 登录信息字： 路径   登录信息
+        /// </summary>
+        public Dictionary<string, LoginInfo> LoginInfos = new Dictionary<string, LoginInfo>();
 
         /// <summary>
         /// 修改
         /// </summary>
         public string File_XG = "修改信息.txt";
+        public List<string> Errors = new List<string>();
         /// <summary>
-        /// 查询
+        /// 所有窗口句柄
         /// </summary>
-        public string File_CX = "查询帐号.txt";
-        /// <summary>
-        /// 密保
-        /// </summary>
-        public string File_MB = "密保资料.txt";
-
-        public IntPtr MAIN_HANDLE = IntPtr.Zero;
-        WinHandle winHandle = new WinHandle();
+        Dictionary<string, WinHandleMan> winHandles = new Dictionary<string, WinHandleMan>();
+        //public IntPtr MAIN_HANDLE = IntPtr.Zero;
+        //WinHandle winHandle = new WinHandle();
         /// <summary>
         /// 1.1 20191231 创建
         /// </summary>
@@ -187,30 +193,114 @@ namespace Mon
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            getWinHandle();
             option = Options.GetOptions();
             Auto = option.Auto;
             if (option.MonSecs > 0)
                 MonSecs = option.MonSecs;
-            DataPath = option.DataPath;
-
-            string startpath = Application.StartupPath;
-            startpath = startpath.Substring(0, startpath.LastIndexOf("\\"));
-            if (new FileInfo(startpath + "\\Config.ini").Exists)
+            if (option.SearchSecs > 0)
+                SearchSecs = option.SearchSecs;
+            if (option.SerKey != "")
+                SerKey = option.SerKey;
+            if (option.ToolPath != "")
             {
-                DataPath = startpath;
+                if (option.ToolPath.Contains(":"))
+                {
+                    if (new FileInfo(option.ToolPath).Exists)
+                    {
+                        PublicTool = true;
+                        ToolPath = option.ToolPath;
+                    }
+                    else
+                    {
+                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "配置账号管理工具[" + option.ToolPath + "]不存在, 默认搜索根目录" });
+                    }
+                }
+                else
+                {
+                    ToolPath = option.ToolPath;
+                }
             }
 
+            //string startpath = Application.StartupPath;
+            //startpath = startpath.Substring(0, startpath.LastIndexOf("\\"));
+            //if (new FileInfo(startpath + "\\Config.ini").Exists)
+            //{
+            //    DataPath = startpath;
+            //}
+
+            Folders = option.Folders;
             if (option.File_XG != "")
                 File_XG = option.File_XG;
-            if (option.File_CX != "")
-                File_CX = option.File_CX;
-            if (option.File_MB != "")
-                File_MB = option.File_MB;
             if (option.SerSubPath != "")
             {
                 SerSubPath = option.SerSubPath;
                 if (SerSubPath.StartsWith("\\"))
                     SerSubPath = SerSubPath.Substring(1);
+            }
+            for (int i = 0; i < Folders.Count; i++)
+            {
+                string subpath = Folders[i];
+                List<string> lginfo = getLoginInfo(subpath);
+                string ip = lginfo[0];
+                if (ip == "")
+                {
+                    if (!Errors.Contains(subpath.ToLower()))
+                    {
+                        Errors.Add(subpath.ToLower());
+                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "配置目录下[" + subpath + "]未读取到配置IP" });
+                    }
+                    continue;
+                }
+                //LoginGate\config.ini  GatePort=7002 
+                string port = lginfo[1];
+                if (port == "")
+                {
+                    if (!Errors.Contains(subpath.ToLower()))
+                    {
+                        Errors.Add(subpath.ToLower());
+                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "配置目录下[" + subpath + "]未读取到配置端口" });
+                    }
+                    continue;
+                }
+                //LoginSrv\Logsrv.ini  LoginPassword=wwssdw11 
+                string pwd = lginfo[2];
+                if (pwd == "")
+                {
+                    if (!Errors.Contains(subpath.ToLower()))
+                    {
+                        Errors.Add(subpath.ToLower());
+                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "配置目录下[" + subpath + "]未读取到配置密码" });
+                    }
+                    continue;
+                }
+
+                if (SerSubPath.StartsWith("\\"))
+                    subpath += SerSubPath;
+                else
+                    subpath += "\\" + SerSubPath;
+                //子路径包含修改文件
+                if (new FileInfo(subpath + "\\" + File_XG).Exists)
+                {
+                    LoginInfo linfo = new LoginInfo(Folders[i].ToLower(), ip, port, pwd);
+                    if (!LoginInfos.ContainsKey(Folders[i].ToLower()))
+                    {
+                        LoginInfos.Add(Folders[i].ToLower(), linfo);
+                    }
+                    else
+                    {
+                        LoginInfos[Folders[i].ToLower()] = linfo;
+                    }
+                    tb_r.Text += Folders[i] + "\r\n";
+                }
+                else
+                {
+                    if (!Errors.Contains(subpath.ToLower()))
+                    {
+                        Errors.Add(subpath.ToLower());
+                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "配置目录下[" + subpath + "]未读取到修改文件" });
+                    }
+                }
             }
             sbtn_rstop.Enabled = false;
             timer_time.Elapsed += new System.Timers.ElapsedEventHandler(SetTime);
@@ -220,13 +310,17 @@ namespace Mon
             timer_time.Start();
 
             cb_auto.Checked = Auto;
-            tb_path.Text = DataPath;
             //Dictionary<string, RowInfo> ss = GetRows(@"D:\ZBJ\sqlite\MirServer\MirServer1\Mir200\Envir\QuestDiary\担保系统\修改资料.txt");
+            timer_search.Elapsed += new System.Timers.ElapsedEventHandler(SearchFolders);
+            timer_search.AutoReset = true;
+            timer_search.Interval = SearchSecs * 1000;
 
             //modifyInfo();
             //Mon_BD();
             if (Auto)
             {
+                //timer_time.Enabled = true;
+                timer_search.Start();
                 AutoStartBD();
             }
         }
@@ -276,30 +370,28 @@ namespace Mon
 
         public void getFolders()
         {
-            //string[] paths = tb_r.Text.Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
-            //Folders = new List<string>();
-            //for (int i = 0; i < paths.Length; i++)
-            //{
-            //    Folders.Add(paths[i]);
-            //}
-
+            string[] paths = tb_r.Text.Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+            Folders = new List<string>();
+            for (int i = 0; i < paths.Length; i++)
+            {
+                Folders.Add(paths[i]);
+            }
         }
 
         public void SaveOptions()
         {
             //MSecsR = int.Parse(tb_tm_r.Text);
             option.Auto = cb_auto.Checked;
-            option.DataPath = DataPath;
+            option.Folders = Folders;
             option.SaveOptions();
         }
 
         private void SerFolders(List<string> rootpath)
         {
-            string SerKey = "";
             SetControlPropertyDlgt(new string[] { "TextBox", "tb_f", "Text", "" });
             List<string> fds = new List<string>();
             string cfstr = "";
-            string[] curarr = "".Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);// tb_r.Text.;
+            string[] curarr = tb_r.Text.Trim().Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);// tb_r.Text.;
             List<string> alst = new List<string>();
             for (int c = 0; c < curarr.Length; c++)
             {
@@ -316,26 +408,69 @@ namespace Mon
                     for (int k = 0; k < dis.Length; k++)
                     {
                         string subpath = dis[k].FullName;
+                        List<string> lginfo = getLoginInfo(subpath);
+                        string ip = lginfo[0];
+                        if (ip == "")
+                        {
+                            if (!Errors.Contains(subpath.ToLower()))
+                            {
+                                Errors.Add(subpath.ToLower());
+                                SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "当前目录下[" + subpath + "]未读取到配置IP" });
+                            }
+                            continue;
+                        }
+                        //LoginGate\config.ini  GatePort=7002 
+                        string port = lginfo[1];
+                        if (port == "")
+                        {
+                            if (!Errors.Contains(subpath.ToLower()))
+                            {
+                                Errors.Add(subpath.ToLower());
+                                SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "当前目录下[" + subpath + "]未读取到配置端口" });
+                            }
+                            continue;
+                        }
+                        //LoginSrv\Logsrv.ini  LoginPassword=wwssdw11 
+                        string pwd = lginfo[2];
+                        if (pwd == "")
+                        {
+                            if (!Errors.Contains(subpath.ToLower()))
+                            {
+                                Errors.Add(subpath.ToLower());
+                                SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "当前目录下[" + subpath + "]未读取到配置密码" });
+                            }
+                            continue;
+                        }
+
                         if (SerSubPath.StartsWith("\\"))
                             subpath += SerSubPath;
                         else
                             subpath += "\\" + SerSubPath;
-
-                        DirectoryInfo disub = new DirectoryInfo(subpath);
-                        if (disub.Exists)
+                        //子路径包含修改文件
+                        if (new FileInfo(subpath + "\\" + File_XG).Exists)
                         {
-                            DirectoryInfo[] subdirs = disub.GetDirectories();
-                            for (int j = 0; j < subdirs.Length; j++)
+                            LoginInfo linfo = new LoginInfo(dis[k].FullName.ToLower(), ip, port, pwd);
+                            if (!alst.Contains(dis[k].FullName.ToLower()))
                             {
-                                if (new FileInfo(subdirs[j].FullName + "\\" + File_XG).Exists || new FileInfo(subdirs[j].FullName + "\\" + File_CX).Exists || new FileInfo(subdirs[j].FullName + "\\" + File_MB).Exists)
+
+                                if (!LoginInfos.ContainsKey(dis[k].FullName.ToLower()))
                                 {
-                                    //子路径包含3个文件
-                                    if (!alst.Contains(subdirs[j].FullName.ToLower()))
-                                    {
-                                        fds.Add(subdirs[j].FullName);
-                                        cfstr += subdirs[j].FullName + "\r\n";
-                                    }
+                                    LoginInfos.Add(dis[k].FullName.ToLower(), linfo);
                                 }
+                                else
+                                {
+                                    LoginInfos[dis[k].FullName.ToLower()] = linfo;
+                                }
+                                fds.Add(dis[k].FullName);
+                                cfstr += dis[k].FullName + "\r\n";
+                            }
+                        }
+                        else
+                        {
+                            if (!Errors.Contains(subpath.ToLower()))
+                            {
+                                Errors.Add(subpath.ToLower());
+                                SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "当前目录下[" + subpath + "]未读取到修改文件" });
                             }
                         }
                     }
@@ -349,35 +484,61 @@ namespace Mon
                 }
                 SetControlPropertyDlgt(new string[] { "TextBox", "tb_r", "Text", cfstr });
                 string lg = "新增: [" + fds.Count + "] 个目录";
-                SetControlPropertyDlgt(new string[] { "TextBox", "tb_f", "Text", lg });
+                SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", lg });
+                //SetControlPropertyDlgt(new string[] { "TextBox", "tb_f", "Text", lg });
                 //SetControlPropertyDlgt(new string[] { "ListBox", "lb_sr", "ItemsAdd", lg });
                 SaveOptions();
             }
             //tb_r.Text = fstr;
         }
 
+        private List<string> getLoginInfo(string path)
+        {
+            //根目录下包含config.ini  ExtIPaddr=106.12.18.156   
+            string ip = GetCfg(path + "\\config.ini", "ExtIPaddr");
+            //LoginGate\config.ini  GatePort=7002 
+            string port = GetCfg(path + "\\LoginGate\\config.ini", "GatePort");
+            //LoginSrv\Logsrv.ini  LoginPassword=wwssdw11 
+            string pwd = GetCfg(path + "\\LoginSrv\\Logsrv.ini", "LoginPassword");
+            List<string> res = new List<string>();
+            res.Add(ip);
+            res.Add(port);
+            res.Add(pwd);
+            return res;
+        }
+
         private void sbtn_browser_Click(object sender, EventArgs e)
         {
-            if (DataPath != "" && new DirectoryInfo(DataPath).Exists)
+            if (SerKey == "")
             {
-                folderBrowserDialog1.SelectedPath = DataPath;
+                MessageBox.Show("搜索关键字为空");
             }
             else
             {
-                folderBrowserDialog1.SelectedPath = Application.StartupPath;
+                Search();
             }
-            if (folderBrowserDialog1.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            {
-                DataPath = folderBrowserDialog1.SelectedPath;
-                tb_path.Text = DataPath;
-            }
-            option.DataPath = DataPath;
-            option.SaveOptions();
+            //if (DataPath != "" && new DirectoryInfo(DataPath).Exists)
+            //{
+            //    folderBrowserDialog1.SelectedPath = DataPath;
+            //}
+            //else
+            //{
+            //    folderBrowserDialog1.SelectedPath = Application.StartupPath;
+            //}
+            //if (folderBrowserDialog1.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            //{
+            //    DataPath = folderBrowserDialog1.SelectedPath;
+            //    tb_path.Text = DataPath;
+            //}
+            //option.DataPath = DataPath;
+            //option.SaveOptions();
         }
 
         private void sbtn_r_Click(object sender, EventArgs e)
         {
-            AutoStartBD();
+            Mon_BD();
+            //timer_search.Start();
+            //AutoStartBD();
         }
 
         private void sbtn_rstop_Click(object sender, EventArgs e)
@@ -387,33 +548,36 @@ namespace Mon
             AutoStopBD();
         }
 
+
         private void AutoStartBD()
         {
             try
             {
                 lb_bd.Items.Clear();
-                MAIN_HANDLE = getWinHandle(DataPath);//E:\Dev\Hook\Mirserver02\
-                string note = "";
-                if (MAIN_HANDLE == IntPtr.Zero)
-                {
-                    note = "该配置路径对应的BLUE控制台未找到，请检查";
-                    MessageBox.Show(note, "提示", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
-                    return;
-                }
-                else
-                {
-                    SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "查找BLUE控制台窗口完成" });
-                }
-                note = initWinHandle();
-                if (note != "")
-                {
-                    MessageBox.Show("初始化窗口组件出错: " + note, "提示", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
-                    return;
-                }
-                else
-                {
-                    SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "初始化窗口组件完成" });
-                }
+
+                //MAIN_HANDLE = getWinHandle(DataPath);//E:\Dev\Hook\Mirserver02\
+                //string note = "";
+                //if (MAIN_HANDLE == IntPtr.Zero)
+                //{
+                //    note = "该配置路径对应的BLUE控制台未找到，请检查";
+                //    MessageBox.Show(note, "提示", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
+                //    return;
+                //}
+                //else
+                //{
+                //    SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "查找BLUE控制台窗口完成" });
+                //}
+                //note = initWinHandle();
+                //if (note != "")
+                //{
+                //    MessageBox.Show("初始化窗口组件出错: " + note, "提示", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
+                //    return;
+                //}
+                //else
+                //{
+                //    SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "初始化窗口组件完成" });
+                //}
+
                 sbtn_r.Enabled = false;
                 sbtn_rstop.Enabled = true;
                 //lb_bd.Items.Add(DateTime.Now.ToString("HH:mm:ss  ") + "开始监控");
@@ -441,6 +605,7 @@ namespace Mon
             try
             {
                 //timer_bd.Stop();
+                timer_search.Stop();
                 thread_bd.Abort();
             }
             catch (Exception ex)
@@ -463,6 +628,7 @@ namespace Mon
             List<string> rootpath = new List<string>();
             rootpath.Add("D:\\");
             rootpath.Add("E:\\");
+            rootpath.Add("F:\\");
             SerFolders(rootpath);
         }
 
@@ -504,174 +670,93 @@ namespace Mon
             try
             {
                 //closeDialog(MAIN_HANDLE);
-                string pstr = DataPath + "\\" + SerSubPath;
-                if (!pstr.EndsWith("\\"))
-                    pstr += "\\";
-
-                //修改文件处理
-                List<MdInfo> acctxg = new List<MdInfo>();
-                string file = pstr + File_XG;
-                if (new FileInfo(file).Exists)
+                getFolders();
+                if (Folders.Count == 0)
                 {
-                    //MdInfo mdinfo = new MdInfo();
-                    //mdinfo.acct = "1112222";
-                    //mdinfo.pwd = "hhh";
-                    //mdinfo.bir = "1990/8/9";
-                    //mdinfo.que1 = "问题111";
-                    //mdinfo.ans1 = "答案111";
-                    //mdinfo.que2 = "问题22";
-                    //mdinfo.ans2 = "答案22";
-                    string data = ReadFile(file).Trim();
-                    string[] arr = data.Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
-                    if (arr.Length > 0)
+                    //SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "路径列表为空" });
+                    return;
+                }
+                for (int i = 0; i < Folders.Count; i++)
+                {
+                    string pstr = Folders[i];
+                    if (!pstr.EndsWith("\\"))
+                        pstr += "\\";
+
+                    //修改文件处理
+                    List<MdInfo> acctxg = new List<MdInfo>();
+                    string file = pstr + SerSubPath + "\\" + File_XG;
+                    if (new FileInfo(file).Exists)
                     {
-                        for (int k = 0; k < arr.Length; k++)
+                        //MdInfo mdinfo = new MdInfo();
+                        //mdinfo.acct = "1112222";
+                        //mdinfo.pwd = "hhh";
+                        //mdinfo.bir = "1990/8/9";
+                        //mdinfo.que1 = "问题111";
+                        //mdinfo.ans1 = "答案111";
+                        //mdinfo.que2 = "问题22";
+                        //mdinfo.ans2 = "答案22";
+                        string data = ReadFile(file).Trim();
+                        string[] arr = data.Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+                        if (arr.Length > 0)
                         {
-                            string line = arr[k];
-                            if (line.Contains(":"))
+                            for (int k = 0; k < arr.Length; k++)
                             {
-                                string[] tarr = line.Split(new string[] { ":" }, StringSplitOptions.None);
-                                //帐号:密码 生日 问题1 答案1 问题2 答案2
-                                if (tarr.Length >= 7)
+                                string line = arr[k];
+                                if (line.Contains(":"))
                                 {
-                                    acctxg.Add(new MdInfo(tarr[0], tarr[1], tarr[2], tarr[3], tarr[4], tarr[5], tarr[6]));
+                                    string[] tarr = line.Split(new string[] { ":" }, StringSplitOptions.None);
+                                    //帐号:密码 生日 问题1 答案1 问题2 答案2
+                                    if (tarr.Length >= 7)
+                                    {
+                                        acctxg.Add(new MdInfo(tarr[0], tarr[1], tarr[2], tarr[3], tarr[4], tarr[5], tarr[6]));
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                int msucc = 0;
-                for (int k = 0; k < acctxg.Count; k++)
-                {
-                    string res = modifyInfo(acctxg[k]);
-                    if (res.Contains("帐号更新成功"))
+                    int msucc = 0;
+                    for (int k = 0; k < acctxg.Count; k++)
                     {
-                        res = "修改帐号[" + acctxg[k].acct + "]-成功  " + res;
-                        msucc++;
-                    }
-                    else
-                    {
-                        res = "修改帐号[" + acctxg[k].acct + "]-失败  " + res;
-                    }
-                    SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", res });
-                    if (acctxg.Count > 1)
-                        Thread.Sleep(300);
-                }
-                if (acctxg.Count > 0)
-                {
-                    WriteFile(file, "");
-                    if (msucc>0)
-                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "修改账号信息完成: " + msucc.ToString() });
-                }
-                Thread.Sleep(200);
-                //查询文件处理
-                List<SelInfo> acctcx = new List<SelInfo>();
-                List<MdInfo> acctcx_succ = new List<MdInfo>();
-                file = pstr + File_CX;
-                if (new FileInfo(file).Exists)
-                {
-                    string data = ReadFile(file).Trim();
-                    string[] arr = data.Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
-                    if (arr.Length > 0)
-                    {
-                        for (int k = 0; k < arr.Length; k++)
+                        string res = modifyInfo(acctxg[k]);
+                        if (res.Contains("帐号更新成功"))
                         {
-                            string line = arr[k];
-                            if (line.Contains(":"))
-                            {
-                                string[] tarr = line.Split(new string[] { ":" }, StringSplitOptions.None);
-                                //帐号:角色名字
-                                if (tarr.Length >= 2)
-                                {
-                                    acctcx.Add(new SelInfo(tarr[0], tarr[1]));
-                                }
-                            }
-                        }
-                    }
-                }
-                for (int k = 0; k < acctcx.Count; k++)
-                {
-                    string res = "";
-                    MdInfo mdInfo = searchInfo(acctcx[k].acct, out res);
-                    if (res == "" && mdInfo.acct != "")
-                    {
-                        res = "查询帐号[" + acctcx[k].acct + "]-成功  " + mdInfo.bir + "|" + mdInfo.ans1 + "|" + mdInfo.que1 + "|" + mdInfo.ans2 + "|" + mdInfo.que2;
-                        mdInfo.role = acctcx[k].role;
-                        acctcx_succ.Add(mdInfo);
-                    }
-                    else
-                    {
-                        res = "查询帐号[" + acctcx[k].acct + "]-失败  " + res;
-                    }
-                    SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", res });
-                    if (acctcx.Count > 1)
-                        Thread.Sleep(300);
-                }
-                if (acctcx.Count > 0)
-                {
-                    WriteFile(file, "");
-                }
-
-                //[自由区]
-                //密保生日=1982/04/06
-                //密保问题1=5
-                //密保答案1=7
-                //密保问题2=3
-                //密保答案2=2
-                bool writeflag = false;
-                file = pstr + File_MB;
-                if (new FileInfo(file).Exists)
-                {
-                    string data = ReadFile(file).Trim();
-                    string lin = "\r\n\r\n";
-                    if (data.EndsWith("\r\n\r\n"))
-                    {
-                        lin = "";
-                    }
-                    else if (data.EndsWith("\r\n"))
-                    {
-                        lin = "\r\n";
-                    }
-                    else
-                    {
-                        lin = "\r\n\r\n";
-                    }
-                    data += lin;
-                    data = data.Replace("\r\n", SPLIT);
-                    //界面操作 查询帐号信息
-                    for (int a = 0; a < acctcx_succ.Count; a++)
-                    {
-                        writeflag = true;
-                        string role = "[" + acctcx_succ[a].role + "]";
-                        string wrstr = role + SPLIT + "密保生日=" + acctcx_succ[a].bir + SPLIT + "密保问题1=" + acctcx_succ[a].que1 + SPLIT + "密保答案1=" + acctcx_succ[a].ans1 + SPLIT + "密保问题2=" + acctcx_succ[a].que2 + SPLIT + "密保答案2=" + acctcx_succ[a].ans2 + SPLIT + SPLIT;
-                        int srt = data.IndexOf(role);
-                        if (srt >= 0)
-                        {
-                            int roleend = data.Length;
-                            int nxt = data.IndexOf("[", srt + role.Length + 1);
-                            if (nxt > 0)
-                                roleend = nxt;
-                            string ssrt = "";
-                            if (srt > 0)
-                                ssrt = data.Substring(0, srt);
-                            string send = "";
-                            if (roleend < data.Length)
-                                send = data.Substring(nxt);
-                            data = ssrt + wrstr + send;
+                            res = "修改帐号[" + acctxg[k].acct + "]-成功  " + res;
+                            msucc++;
                         }
                         else
                         {
-                           
-                            data = data+ wrstr;
+                            res = "修改帐号[" + acctxg[k].acct + "]-失败  " + res;
                         }
+                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", res });
+                        if (acctxg.Count > 1)
+                            Thread.Sleep(300);
                     }
-
-                    if (writeflag)
+                    if (acctxg.Count > 0)
                     {
-                        data = data.Replace(SPLIT, "\r\n");
-                        WriteFile(file, data);
-                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "更新密保资料完成: " + acctcx_succ.Count });
+                        //WriteFile(file, "");
+                        if (msucc > 0)
+                            SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "修改账号信息完成: " + msucc.ToString() });
                     }
+                    //Thread.Sleep(200);
+
+                    //for (int k = 0; k < acctcx.Count; k++)
+                    //{
+                    //    string res = "";
+                    //    MdInfo mdInfo = searchInfo(acctcx[k].acct, out res);
+                    //    if (res == "" && mdInfo.acct != "")
+                    //    {
+                    //        res = "查询帐号[" + acctcx[k].acct + "]-成功  " + mdInfo.bir + "|" + mdInfo.ans1 + "|" + mdInfo.que1 + "|" + mdInfo.ans2 + "|" + mdInfo.que2;
+                    //        mdInfo.role = acctcx[k].role;
+                    //        acctcx_succ.Add(mdInfo);
+                    //    }
+                    //    else
+                    //    {
+                    //        res = "查询帐号[" + acctcx[k].acct + "]-失败  " + res;
+                    //    }
+                    //    SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", res });
+                    //    if (acctcx.Count > 1)
+                    //        Thread.Sleep(300);
+                    //}
                 }
             }
             catch (Exception ex)
@@ -692,15 +777,24 @@ namespace Mon
             return title;
         }
 
+        public string getHandleText(IntPtr edit)
+        {
+            const int buffer_size = 1024;
+            StringBuilder title = new StringBuilder(buffer_size);
+            SendMessage(edit, WM_GETTEXT, buffer_size, title);
+            return title.ToString();
+        }
+
         /// <summary>
         /// 根据配置获取控制台Handle
         /// </summary>
         /// <param name="serverDataPath">配置路径</param>
         /// <returns></returns>
-        public IntPtr getWinHandle(string serverDataPath)
+        public IntPtr getWinHandle()
         {
             IntPtr handle = IntPtr.Zero;
-            IntPtr hWnd1 = FindWindow(null, getWinTitle());//GameOfMir微信控制台[正式]
+            string winTitle = "远程账号管理 [www.gameofmir.com]";
+            IntPtr hWnd1 = FindWindow(null, winTitle);
             while (hWnd1 != IntPtr.Zero)
             {
                 //if (hWnd1 == IntPtr.Zero)
@@ -708,79 +802,174 @@ namespace Mon
                 //    note = "[控制台窗口]未找到，请确认控制台窗口标题是否正确";//, "提示", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
                 //    return handle;
                 //}                
+                //搜索按钮
+                IntPtr hWndbtnser = FindWindowEx(hWnd1, IntPtr.Zero, "TButton", "查询");
+                if (hWndbtnser == IntPtr.Zero)
+                    goto NEWHANDLE;
+                //修改按钮
+                IntPtr hWndbtnmdy = FindWindowEx(hWnd1, IntPtr.Zero, "TButton", "修改");
+                if (hWndbtnmdy == IntPtr.Zero)
+                    goto NEWHANDLE;
+                IntPtr hWndbtnadd = FindWindowEx(hWnd1, IntPtr.Zero, "TButton", "增加");
+                if (hWndbtnadd == IntPtr.Zero)
+                    goto NEWHANDLE;
+                IntPtr hWndbtndel = FindWindowEx(hWnd1, IntPtr.Zero, "TButton", "删除");
+                if (hWndbtndel == IntPtr.Zero)
+                    goto NEWHANDLE;
+                IntPtr hWndphone = FindWindowEx(hWnd1, IntPtr.Zero, "TEdit", null);
+                if (hWndphone == IntPtr.Zero)
+                    goto NEWHANDLE;
+                WinHandleMan handleMan = new WinHandleMan();
+                handleMan.Main = hWnd1;
+                handleMan.E_Phone = hWndphone;
+                handleMan.BTN_Ser = hWndbtnser;
+                handleMan.BTN_Mdy = hWndbtnmdy;
+                handleMan.BTN_Add = hWndbtnadd;
+                handleMan.BTN_Del = hWndbtndel;
 
-                IntPtr hWndPageControl = FindWindowEx(hWnd1, IntPtr.Zero, "TPageControl", "");//开始
-                if (hWndPageControl == IntPtr.Zero)
+
+                IntPtr hWchild2 = GetWindow(hWnd1, (int)WindowSearch.GW_HWNDPREV);
+                string txt2 = getHandleText(hWchild2);
+
+                int maxSer = 5;
+                int seridx = 0;
+                bool sersucc = false;
+                IntPtr hWchild = GetWindow(hWnd1, (int)WindowSearch.GW_HWNDNEXT);
+                while (hWchild != IntPtr.Zero)
                 {
-                    goto NEWHANDLE;
-                    //note = "[配置选项卡组]未找到";
-                    //return handle;
+                    seridx++;
+                    if (seridx >= maxSer)
+                        break;
+                    string txt = getHandleText(hWchild);
+                    if (txt == "登陆")
+                    {
+                        handleMan.Login.LMain = hWchild;
+                        sersucc = true;
+                        break;
+                    }
+                    hWchild = GetWindow(hWchild, (int)WindowSearch.GW_HWNDNEXT);
+                }
+                if(!sersucc)
+                {
+                    seridx = 0;
+                    hWchild = GetWindow(hWnd1, (int)WindowSearch.GW_HWNDPREV);
+                    while (hWchild != IntPtr.Zero)
+                    {
+                        seridx++;
+                        if (seridx >= maxSer)
+                            break;
+                        string txt = getHandleText(hWchild);
+                        if (txt == "登陆")
+                        {
+                            handleMan.Login.LMain = hWchild;
+                            sersucc = true;
+                            break;
+                        }
+                        hWchild = GetWindow(hWchild, (int)WindowSearch.GW_HWNDPREV);
+                    }
                 }
 
-                IntPtr hWndTabSheetCfg = FindWindowEx(hWndPageControl, IntPtr.Zero, "TTabSheet", "配置向导");
-                if (hWndTabSheetCfg == IntPtr.Zero)
+                if(!sersucc)
+                {
+                    //未找到登陆窗口
+                    goto NEWHANDLE;
+                }
+                hWchild = handleMan.Login.LMain;
+                IntPtr hWclogin = FindWindowEx(hWchild, IntPtr.Zero, "TButton", "登陆");
+                IntPtr hWcclose = FindWindowEx(hWchild, IntPtr.Zero, "TButton", "关闭");
+                IntPtr hWcgroup = FindWindowEx(hWchild, IntPtr.Zero, "TGroupBox", null);
+                IntPtr cedit = FindWindowEx(hWcgroup, IntPtr.Zero, "TEdit", null);
+                for (int i = 1; i <= 4; i++)
+                {
+                    cedit = FindWindowEx(hWcgroup, cedit, "TEdit", null);
+                    if (cedit != IntPtr.Zero)
+                    {
+                        string s = getHandleText(cedit);
+                        switch (i)
+                        {
+                            case 1:
+                                handleMan.Login.LE_IP = cedit;
+                                break;
+                            case 2:
+                                handleMan.Login.LE_Port = cedit;
+                                break;
+                            case 4:
+                                handleMan.Login.LE_Pwd = cedit;
+                                break;
+                        }
+                    }
+                }
+                //IntPtr hWnddia = FindWindow("TFrmLogin", "登陆");
+                //while (hWnddia != IntPtr.Zero)
+                //{
+                //    IntPtr hWowner2 = GetWindow(hWnddia, (int)WindowSearch.GW_HWNDPREV);
+                //    if (hWowner2 == hWnd1)
+                //    {
+                //        break;
+                //    }
+                //    hWnddia = FindWindowEx(IntPtr.Zero, hWnddia, "TFrmLogin", "登陆");
+                //}
+                IntPtr hWndGroupBox = FindWindowEx(hWnd1, IntPtr.Zero, "TGroupBox", "账号");//账号组合框
+                if (hWndGroupBox == IntPtr.Zero)
                 {
                     goto NEWHANDLE;
-                    //note = "[配置向导选项卡]未找到";
-                    //return handle;
                 }
-                IntPtr hCfg_pagectl = FindWindowEx(hWndTabSheetCfg, IntPtr.Zero, "TPageControl", "");
-                if (hCfg_pagectl == IntPtr.Zero)
+                IntPtr hCfg_edit = FindWindowEx(hWndGroupBox, IntPtr.Zero, "TEdit", null);
+                for (int i = 1; i <= 11; i++)
                 {
-                    goto NEWHANDLE;
-                    //note = "[配置项目选项组]未找到";
-                    //return handle;
-                }
-                IntPtr hCfg_tabsheet = FindWindowEx(hCfg_pagectl, IntPtr.Zero, "TTabSheet", "第一步(基本设置)");
-                if (hCfg_tabsheet == IntPtr.Zero)
-                {
-                    goto NEWHANDLE;
-                    //note = "[第一步(基本设置)]未找到";
-                    //return handle;
-                }
-                IntPtr hCfg_grpbox = FindWindowEx(hCfg_tabsheet, IntPtr.Zero, "TGroupBox", "程序目录及物品数据库设置");
-                if (hCfg_grpbox == IntPtr.Zero)
-                {
-                    goto NEWHANDLE;
-                    //note = "[程序目录及物品数据库设置]未找到";
-                    //return handle;
-                }
-                IntPtr hCfg_edit = FindWindowEx(hCfg_grpbox, IntPtr.Zero, "TEdit", null);
-                //1 服务器名称   2 数据库名称  3引擎目录
-                string cfgpath = "";
-                for (int i = 1; i <= 3; i++)
-                {
-                    hCfg_edit = FindWindowEx(hCfg_grpbox, hCfg_edit, "TEdit", null);
+                    hCfg_edit = FindWindowEx(hWndGroupBox, hCfg_edit, "TEdit", null);
                     if (hCfg_edit != IntPtr.Zero)
                     {
                         //StringBuilder title = new StringBuilder(200);
                         //int len = GetWindowText(hCfg_edit, title, 200);
-                        const int buffer_size = 1024;
-                        StringBuilder title = new StringBuilder(buffer_size);
-                        SendMessage(hCfg_edit, WM_GETTEXT, buffer_size, title);
-                        if (i == 3)
+                        //const int buffer_size = 1024;
+                        //StringBuilder title = new StringBuilder(buffer_size);
+                        //SendMessage(hCfg_edit, WM_GETTEXT, buffer_size, title);
+                        switch (i)
                         {
-                            cfgpath = title.ToString();
+                            case 1:
+                                //问题一
+                                handleMan.E_Que1 = hCfg_edit;
+                                break;
+                            case 2:
+                                handleMan.E_Pwd = hCfg_edit;
+                                break;
+                            case 3:
+                                handleMan.E_Name = hCfg_edit;
+                                break;
+                            case 4:
+                                //生日
+                                handleMan.E_Bir = hCfg_edit;
+                                break;
+                            case 5:
+                                //问题二
+                                handleMan.E_Que2 = hCfg_edit;
+                                break;
+                            case 6:
+                                //答案二
+                                handleMan.E_Ans2 = hCfg_edit;
+                                break;
+                            case 7:
+                                //电子邮箱
+                                handleMan.E_Mail = hCfg_edit;
+                                break;
+                            case 8:
+                                handleMan.E_Card = hCfg_edit;
+                                break;
+                            case 9:
+                                handleMan.E_Acct = hCfg_edit;
+                                break;
+                            case 10:
+                                break;
+                            case 11:
+                                handleMan.E_Ans1 = hCfg_edit;
+                                break;
                         }
                     }
                 }
-                if (cfgpath == "")
-                {
-                    goto NEWHANDLE;
-                    //note = "[数据引擎所在目录]未找到";
-                    //return handle;
-                }
-                if (!cfgpath.EndsWith("\\"))
-                    cfgpath += "\\";
-                if (!serverDataPath.EndsWith("\\"))
-                    serverDataPath += "\\";
-                if (cfgpath.ToUpper() == serverDataPath.ToUpper())
-                {
-                    handle = hWnd1;
-                    return handle;
-                }
+
             NEWHANDLE:
-                hWnd1 = FindWindowEx(IntPtr.Zero, hWnd1, "TfrmMain", getWinTitle());//FindWindow(null, getWinTitle());
+                hWnd1 = FindWindowEx(IntPtr.Zero, hWnd1, "TfrmMain", winTitle);//FindWindow(null, getWinTitle());
             }
             return handle;
         }
@@ -1269,6 +1458,22 @@ namespace Mon
                 return false;
                 throw exp;
             }
+        }
+
+        public string GetCfg(string path, string key)
+        {
+            string valstr = "";
+            string filestr = ReadFile(path);
+            string[] arr = filestr.Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < arr.Length; i++)
+            {
+                if (arr[i].Replace(" ", "").StartsWith(key + "="))
+                {
+                    valstr = arr[i].Substring(arr[i].IndexOf("=") + 1);
+                    break;
+                }
+            }
+            return valstr;
         }
 
         public string ReadFile(string fname)
@@ -1794,26 +1999,24 @@ namespace Mon
     public class Options
     {
         public bool Auto = true;
-        public int MonSecs = 2000;
+        public int MonSecs = 5;
+        public int SearchSecs = 20;
         //帐号担保路径
         public string SerSubPath = "";
         /// <summary>
         /// 数据引擎目录
         /// </summary>
-        public string DataPath = "";
+        public string SerKey = "";
         /// <summary>
         /// 修改信息
         /// </summary>
         public string File_XG = "";
         /// <summary>
-        /// 查询帐号
+        /// 账号管理软件路径，如果为空默认搜索根目录下：远程账号管理工具.exe
         /// </summary>
-        public string File_CX = "";
-        /// <summary>
-        /// 密保资料
-        /// </summary>
-        public string File_MB = "";
-        //public List<string> Folders = new List<string>();
+        public string ToolPath = "";
+
+        public List<string> Folders = new List<string>();
         public void SaveOptions()
         {
             string path = Application.StartupPath + "\\" + OptionsFileName;
@@ -1861,6 +2064,68 @@ namespace Mon
                 return "Cfg.xml";
             }
         }
+    }
+
+    public class LoginInfo
+    {
+        public string Path = "";
+        public string IP = "";
+        public string Port = "";
+        public string Pwd = "";
+
+        public LoginInfo()
+        {
+
+        }
+
+        public LoginInfo(string vpath, string vip, string vport, string vpwd)
+        {
+            Path = vpath;
+            IP = vip;
+            Port = vport;
+            Pwd = vpwd;
+        }
+
+    }
+
+    public class WinHandleMan
+    {
+        public HandleLogin Login = new HandleLogin();
+        public IntPtr Main = IntPtr.Zero;
+        public IntPtr IN_Acct = IntPtr.Zero;
+        public IntPtr BTN_Ser = IntPtr.Zero;
+        public IntPtr BTN_Mdy = IntPtr.Zero;
+        public IntPtr BTN_Add = IntPtr.Zero;
+        public IntPtr BTN_Del = IntPtr.Zero;
+        /// <summary>
+        /// 两步验证
+        /// </summary>
+        public IntPtr E_Acct = IntPtr.Zero;
+        public IntPtr E_Pwd = IntPtr.Zero;
+        public IntPtr E_Bir = IntPtr.Zero;
+        public IntPtr E_Name = IntPtr.Zero;
+        public IntPtr E_Card = IntPtr.Zero;
+
+        public IntPtr E_Que1 = IntPtr.Zero;
+        public IntPtr E_Que2 = IntPtr.Zero;
+        public IntPtr E_Ans1 = IntPtr.Zero;
+        public IntPtr E_Ans2 = IntPtr.Zero;
+
+        public IntPtr E_Mail = IntPtr.Zero;
+        public IntPtr E_Phone = IntPtr.Zero;
+
+        public class HandleLogin
+        {
+
+            public IntPtr LMain = IntPtr.Zero;
+            public IntPtr LBTN_Login = IntPtr.Zero;
+            public IntPtr LBTN_Close = IntPtr.Zero;
+
+            public IntPtr LE_IP = IntPtr.Zero;
+            public IntPtr LE_Port = IntPtr.Zero;
+            public IntPtr LE_Pwd = IntPtr.Zero;
+        }
+
     }
 
     public class WinHandle
@@ -3256,8 +3521,6 @@ namespace Mon
                 {
                     if (strRNum == regnum)
                     {
-
-
                         state = true;
                     }
                 }
