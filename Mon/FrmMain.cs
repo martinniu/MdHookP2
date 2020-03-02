@@ -90,7 +90,8 @@ namespace Mon
         public delegate bool CallBack(IntPtr hwnd, int lParam);
         [DllImport("user32.dll")]
         public static extern int EnumChildWindows(IntPtr hWndParent, CallBack lpfn, int lParam);
-
+        [DllImport("user32.dll")]
+        public static extern bool IsWindowVisible(IntPtr hWnd);
         [DllImport("user32")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool EnumChildWindows(IntPtr window, EnumWindowProc callback, IntPtr i);
@@ -180,6 +181,7 @@ namespace Mon
         /// 所有窗口句柄
         /// </summary>
         Dictionary<string, WinHandleMan> winHandles = new Dictionary<string, WinHandleMan>();
+        //https://blog.csdn.net/m0_37693130/article/details/86686799
         //public IntPtr MAIN_HANDLE = IntPtr.Zero;
         //WinHandle winHandle = new WinHandle();
         /// <summary>
@@ -193,7 +195,6 @@ namespace Mon
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            getWinHandle();
             option = Options.GetOptions();
             Auto = option.Auto;
             if (option.MonSecs > 0)
@@ -213,15 +214,29 @@ namespace Mon
                     }
                     else
                     {
-                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "配置账号管理工具[" + option.ToolPath + "]不存在, 默认搜索根目录" });
+                        MessageBox.Show("配置文件中账号管理工具[" + option.ToolPath + "]不存在请检查", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        Application.Exit();
                     }
                 }
                 else
                 {
-                    ToolPath = option.ToolPath;
+                    ToolPath = Application.StartupPath + "\\" + option.ToolPath;
+                    if (!new FileInfo(ToolPath).Exists)
+                    {
+                        MessageBox.Show("当前软件目录下未找到软件[" + ToolPath + "]", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        Application.Exit();
+                    }
                 }
             }
-
+            else
+            {
+                ToolPath = Application.StartupPath + "\\" + ToolPath;
+                if (!new FileInfo(ToolPath).Exists)
+                {
+                    MessageBox.Show("当前软件目录下未找到软件[" + ToolPath + "]", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    Application.Exit();
+                }
+            }
             //string startpath = Application.StartupPath;
             //startpath = startpath.Substring(0, startpath.LastIndexOf("\\"));
             //if (new FileInfo(startpath + "\\Config.ini").Exists)
@@ -315,6 +330,9 @@ namespace Mon
             timer_search.AutoReset = true;
             timer_search.Interval = SearchSecs * 1000;
 
+            getWinHandles();
+            SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "检测到已打开的[" + winHandles.Count + "]个账号管理工具" });
+
             //modifyInfo();
             //Mon_BD();
             if (Auto)
@@ -382,6 +400,7 @@ namespace Mon
         {
             //MSecsR = int.Parse(tb_tm_r.Text);
             option.Auto = cb_auto.Checked;
+            getFolders();
             option.Folders = Folders;
             option.SaveOptions();
         }
@@ -548,7 +567,6 @@ namespace Mon
             AutoStopBD();
         }
 
-
         private void AutoStartBD()
         {
             try
@@ -676,6 +694,7 @@ namespace Mon
                     //SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "路径列表为空" });
                     return;
                 }
+                bool getflag = false;
                 for (int i = 0; i < Folders.Count; i++)
                 {
                     string pstr = Folders[i];
@@ -715,9 +734,62 @@ namespace Mon
                         }
                     }
                     int msucc = 0;
+                    string winKey = "";
+                    if (acctxg.Count > 0)
+                    {
+                        if (!getflag)
+                        {
+                            //获取最新的窗口列表
+                            getWinHandles();
+                            getflag = true;
+                        }
+
+                        LoginInfo lginfo = null;
+                        if (LoginInfos.ContainsKey(Folders[i].ToLower()))
+                            lginfo = LoginInfos[Folders[i].ToLower()];
+                        if (LoginInfos.ContainsKey(Folders[i].ToLower() + "\\"))
+                            lginfo = LoginInfos[Folders[i].ToLower() + "\\"];
+                        if (lginfo == null)
+                        {
+                            SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "当前路径配置文件缺失: " + Folders[i] });
+                            continue;
+                        }
+                        string dickey = lginfo.getKey();
+                        string dickey2 = lginfo.getKey127();
+                        if (winHandles.ContainsKey(dickey))
+                        {
+                            winKey = dickey;
+                        }
+                        if (winHandles.ContainsKey(dickey2))
+                        {
+                            winKey = dickey2;
+                        }
+                        if (winKey == "")
+                        {
+                            SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "当前路径: " + Folders[i] + " 账号管理工具未运行, 自动打开" });
+                            System.Diagnostics.Process.Start(ToolPath);
+                            Thread.Sleep(2000);
+                            //获取新打开的窗口列表
+                            getWinHandles(false, lginfo);
+                        }
+                        if (winHandles.ContainsKey(dickey))
+                        {
+                            winKey = dickey;
+                        }
+                        if (winHandles.ContainsKey(dickey2))
+                        {
+                            winKey = dickey2;
+                        }
+                        if (winKey == "")
+                        {
+                            SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "当前路径: " + Folders[i] + " 账号管理工具自动登录异常，请检查端口密码" });
+                            continue;
+                        }
+                    }
+
                     for (int k = 0; k < acctxg.Count; k++)
                     {
-                        string res = modifyInfo(acctxg[k]);
+                        string res = modifyInfo(winKey,acctxg[k]);
                         if (res.Contains("帐号更新成功"))
                         {
                             res = "修改帐号[" + acctxg[k].acct + "]-成功  " + res;
@@ -786,16 +858,23 @@ namespace Mon
         }
 
         /// <summary>
-        /// 根据配置获取控制台Handle
+        /// 获取所有管理工具窗口
         /// </summary>
-        /// <param name="serverDataPath">配置路径</param>
-        /// <returns></returns>
-        public IntPtr getWinHandle()
+        /// <returns>返回最新打开的窗口</returns>
+        public void getWinHandles(bool serAll = true, LoginInfo lginfo = null)
         {
-            IntPtr handle = IntPtr.Zero;
+            List<IntPtr> manhds = new List<IntPtr>();
+            if (!serAll)
+            {
+                foreach (string item in winHandles.Keys)
+                {
+                    manhds.Add(winHandles[item].Main);
+                }
+            }
+            winHandles = new Dictionary<string, WinHandleMan>();
             string winTitle = "远程账号管理 [www.gameofmir.com]";
             IntPtr hWnd1 = FindWindow(null, winTitle);
-            while (hWnd1 != IntPtr.Zero)
+            while (hWnd1 != IntPtr.Zero && (serAll || (!serAll && !manhds.Contains(hWnd1))))
             {
                 //if (hWnd1 == IntPtr.Zero)
                 //{
@@ -849,7 +928,7 @@ namespace Mon
                     }
                     hWchild = GetWindow(hWchild, (int)WindowSearch.GW_HWNDNEXT);
                 }
-                if(!sersucc)
+                if (!sersucc)
                 {
                     seridx = 0;
                     hWchild = GetWindow(hWnd1, (int)WindowSearch.GW_HWNDPREV);
@@ -869,36 +948,93 @@ namespace Mon
                     }
                 }
 
-                if(!sersucc)
+                if (!sersucc)
                 {
                     //未找到登陆窗口
                     goto NEWHANDLE;
                 }
                 hWchild = handleMan.Login.LMain;
-                IntPtr hWclogin = FindWindowEx(hWchild, IntPtr.Zero, "TButton", "登陆");
-                IntPtr hWcclose = FindWindowEx(hWchild, IntPtr.Zero, "TButton", "关闭");
+                handleMan.Login.LBTN_Login = FindWindowEx(hWchild, IntPtr.Zero, "TButton", "登陆");
+                handleMan.Login.LBTN_Close = FindWindowEx(hWchild, IntPtr.Zero, "TButton", "关闭");
                 IntPtr hWcgroup = FindWindowEx(hWchild, IntPtr.Zero, "TGroupBox", null);
                 IntPtr cedit = FindWindowEx(hWcgroup, IntPtr.Zero, "TEdit", null);
+
                 for (int i = 1; i <= 4; i++)
                 {
                     cedit = FindWindowEx(hWcgroup, cedit, "TEdit", null);
                     if (cedit != IntPtr.Zero)
                     {
-                        string s = getHandleText(cedit);
-                        switch (i)
+                        if (serAll)
                         {
-                            case 1:
-                                handleMan.Login.LE_IP = cedit;
-                                break;
-                            case 2:
-                                handleMan.Login.LE_Port = cedit;
-                                break;
-                            case 4:
-                                handleMan.Login.LE_Pwd = cedit;
-                                break;
+                            string s = getHandleText(cedit);
+                            switch (i)
+                            {
+                                case 1:
+                                    handleMan.Login.LE_IP = cedit;
+                                    handleMan.Login.IP = s;
+                                    break;
+                                case 2:
+                                    handleMan.Login.LE_Port = cedit;
+                                    handleMan.Login.Port = s;
+                                    break;
+                                case 4:
+                                    handleMan.Login.LE_Pwd = cedit;
+                                    handleMan.Login.Pwd = s;
+                                    break;
+                            }
+                        }
+                        else
+                        {
+                            switch (i)
+                            {
+                                case 1:
+                                    handleMan.Login.LE_IP = cedit;
+                                    SendMessage(cedit, WM_SETTEXT, IntPtr.Zero, "127.0.0.1");
+                                    handleMan.Login.IP = "127.0.0.1";
+                                    break;
+                                case 2:
+                                    handleMan.Login.LE_Port = cedit;
+                                    SendMessage(cedit, WM_SETTEXT, IntPtr.Zero, lginfo.Port);
+                                    handleMan.Login.Port = lginfo.Port;
+                                    break;
+                                case 4:
+                                    handleMan.Login.LE_Pwd = cedit;
+                                    SendMessage(cedit, WM_SETTEXT, IntPtr.Zero, lginfo.Pwd);
+                                    handleMan.Login.Pwd = lginfo.Pwd;
+                                    break;
+                            }
                         }
                     }
                 }
+
+                bool sh = IsWindowVisible(hWchild);
+                if (sh)
+                {
+                    //点击登录按钮
+                    PostMessage(handleMan.Login.LBTN_Login, WM_CLICK, IntPtr.Zero, "");
+                    Thread.Sleep(300);
+                    string mdres = getDialogText(hWchild);
+                    //while (true)
+                    //{
+                    //    mdres = getDialogText(hWchild);
+                    //    if (mdres != "")
+                    //        break;
+                    //    Thread.Sleep(100);
+                    //}
+                    if (mdres != "")
+                    {
+                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "登陆错误: " + mdres });
+                        continue;
+                    }
+                    else
+                    {
+                        if (lginfo != null)
+                            SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "登陆成功: " + lginfo.getKey127() });
+                        else
+                            SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "超时自动登陆成功: " + handleMan.Login.IP + "_" + handleMan.Login.Port + "_" + handleMan.Login.Pwd });
+                    }
+                }
+
                 //IntPtr hWnddia = FindWindow("TFrmLogin", "登陆");
                 //while (hWnddia != IntPtr.Zero)
                 //{
@@ -967,11 +1103,14 @@ namespace Mon
                         }
                     }
                 }
-
+                string hkey = handleMan.Login.IP + "_" + handleMan.Login.Port + "_" + handleMan.Login.Pwd;
+                if (!winHandles.ContainsKey(hkey))
+                {
+                    winHandles.Add(hkey, handleMan);
+                }
             NEWHANDLE:
                 hWnd1 = FindWindowEx(IntPtr.Zero, hWnd1, "TfrmMain", winTitle);//FindWindow(null, getWinTitle());
             }
-            return handle;
         }
 
         //获取类名
@@ -980,25 +1119,26 @@ namespace Mon
         //IntPtr Handle = FindWindowEx(this.Handle, IntPtr.Zero, ClassName.ToString(), String.Empty);
         //SendMessage(Handle, WM_CLICK, 0);
 
-        public string modifyInfo(MdInfo mdinfo)
+        public string modifyInfo(string winKey, MdInfo mdinfo)
         {
             string mdres = "";
             try
             {
-                SendMessage(winHandle.IN_Acct, WM_SETTEXT, IntPtr.Zero, mdinfo.acct);
+                SendMessage(winHandles[winKey].E_Acct, WM_SETTEXT, IntPtr.Zero, mdinfo.acct);
                 //SendMessage(winHandle.BTN_Search, WM_CLICK, IntPtr.Zero, ""); //搜索点击
-                PostMessage(winHandle.BTN_Search, WM_CLICK, IntPtr.Zero, "");//点击确定更新
+                PostMessage(winHandles[winKey].BTN_Ser, WM_CLICK, IntPtr.Zero, "");//点击确定更新
                 Thread.Sleep(300);
                 while (true)
                 {
-                    mdres = getDialogText(MAIN_HANDLE);
+                    mdres = getDialogText(winHandles[winKey].Main);
                     if (mdres != "")
                         break;
                     else
                     {
-                        const int buffer_size = 256;
-                        StringBuilder txt = new StringBuilder(buffer_size);
-                        SendMessage(winHandle.E_Acct, WM_GETTEXT, buffer_size, txt);
+                        //const int buffer_size = 256;
+                        //StringBuilder txt = new StringBuilder(buffer_size);
+                        //SendMessage(winHandles[winKey].E_Acct, WM_GETTEXT, buffer_size, txt);
+                        string txt = getHandleText(winHandles[winKey].E_Acct);
                         if (txt.ToString() != "")
                             break;
                     }
@@ -1006,20 +1146,21 @@ namespace Mon
                 }
                 if (mdres != "")
                     return mdres;
-
-                SendMessage(winHandle.E_Bir, WM_SETTEXT, IntPtr.Zero, mdinfo.bir);
-                SendMessage(winHandle.E_Pwd, WM_SETTEXT, IntPtr.Zero, mdinfo.pwd);
-                SendMessage(winHandle.E_Que1, WM_SETTEXT, IntPtr.Zero, mdinfo.que1);
-                SendMessage(winHandle.E_Que2, WM_SETTEXT, IntPtr.Zero, mdinfo.que2);
-                SendMessage(winHandle.E_Ans1, WM_SETTEXT, IntPtr.Zero, mdinfo.ans1);
-                SendMessage(winHandle.E_Ans2, WM_SETTEXT, IntPtr.Zero, mdinfo.ans2);
-                SendMessage(winHandle.E_Two, WM_SETTEXT, IntPtr.Zero, "");
+                //帐号:密码 生日 问题1 答案1 问题2 答案2   用冒号隔开的
+                SendMessage(winHandles[winKey].E_Bir, WM_SETTEXT, IntPtr.Zero, mdinfo.bir);
+                SendMessage(winHandles[winKey].E_Pwd, WM_SETTEXT, IntPtr.Zero, mdinfo.pwd);
+                SendMessage(winHandles[winKey].E_Que1, WM_SETTEXT, IntPtr.Zero, mdinfo.que1);
+                SendMessage(winHandles[winKey].E_Que2, WM_SETTEXT, IntPtr.Zero, mdinfo.que2);
+                SendMessage(winHandles[winKey].E_Ans1, WM_SETTEXT, IntPtr.Zero, mdinfo.ans1);
+                SendMessage(winHandles[winKey].E_Ans2, WM_SETTEXT, IntPtr.Zero, mdinfo.ans2);
 
                 //SendMessage(winHandle.BTN_OK, WM_CLICK, IntPtr.Zero, "");//点击确定更新
-                PostMessage(winHandle.BTN_OK, WM_CLICK, IntPtr.Zero, "");//点击确定更新
+                PostMessage(winHandles[winKey].BTN_Mdy, WM_CLICK, IntPtr.Zero, "");//点击确定更新
                 while (true)
                 {
-                    mdres = getDialogText(MAIN_HANDLE);
+                    //捕获  是否确认要修改账号  对黄框
+
+                    mdres = getDialogText(winHandles[winKey].Main);
                     if (mdres != "")
                         break;
                     Thread.Sleep(50);
@@ -1032,22 +1173,22 @@ namespace Mon
             return mdres;
         }
 
-        public MdInfo searchInfo(string acct, out string mdres)
+        public MdInfo searchInfo(WinHandleMan winHandle, string acct, out string mdres)
         {
             MdInfo mdinfo = new MdInfo();
             mdres = "";
             try
             {
                 SendMessage(winHandle.IN_Acct, WM_SETTEXT, IntPtr.Zero, acct);
-                SetForegroundWindow(MAIN_HANDLE);
+                SetForegroundWindow(winHandle.Main);
                 //SendMessage(winHandle.BTN_Search, WM_CLICK, IntPtr.Zero, ""); //搜索点击
-                PostMessage(winHandle.BTN_Search, WM_CLICK, IntPtr.Zero, "");
+                PostMessage(winHandle.BTN_Ser, WM_CLICK, IntPtr.Zero, "");
                 Thread.Sleep(300);
                 const int buffer_size = 256;
                 StringBuilder txt = new StringBuilder(buffer_size);
                 while (true)
                 {
-                    mdres = getDialogText(MAIN_HANDLE);
+                    mdres = getDialogText(winHandle.Main);
                     if (mdres != "")
                         break;
                     else
@@ -1098,179 +1239,199 @@ namespace Mon
             }
             return mdinfo;
         }
-        public string initWinHandle()
+        //public string initWinHandle()
+        //{
+        //    string mdres = "";
+        //    try
+        //    {
+        //        winHandle = new WinHandle();
+        //        if (MAIN_HANDLE == IntPtr.Zero)
+        //        {
+        //            mdres = "错误: 该配置路径对应的BLUE控制台未找到";
+        //            //SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", mdres });
+        //            return mdres;
+        //        }
+        //        IntPtr hWndPageControl = FindWindowEx(MAIN_HANDLE, IntPtr.Zero, "TPageControl", "");
+        //        IntPtr hWndTabSheet = FindWindowEx(hWndPageControl, IntPtr.Zero, "TTabSheet", "帐号管理");
+        //        if (hWndTabSheet == IntPtr.Zero)
+        //        {
+        //            return "[帐号管理选项卡]未找到";
+        //        }
+        //        IntPtr hWndaccpwd = FindWindowEx(hWndTabSheet, IntPtr.Zero, "TGroupBox", "登录帐号密码");
+        //        if (hWndaccpwd == IntPtr.Zero)
+        //        {
+        //            return "[登录帐号密码选项卡]未找到";
+        //        }
+
+        //        //文本框帐号信息
+        //        IntPtr hWndacc = FindWindowEx(hWndaccpwd, IntPtr.Zero, "TEdit", "");
+        //        if (hWndacc == IntPtr.Zero)
+        //            return "[文本框帐号]未找到";
+        //        //搜索按钮
+        //        IntPtr hWndbtnser = FindWindowEx(hWndaccpwd, IntPtr.Zero, "TButton", "搜索(&S)");
+        //        if (hWndacc == IntPtr.Zero)
+        //            return "[搜索按钮]未找到";
+        //        //确定按钮
+        //        IntPtr hWndbtnok = FindWindowEx(hWndaccpwd, IntPtr.Zero, "TButton", "确定(&O)");
+        //        if (hWndacc == IntPtr.Zero)
+        //            return "[确定按钮]未找到";
+        //        winHandle.IN_Acct = hWndacc;
+        //        winHandle.BTN_OK = hWndbtnok;
+        //        winHandle.BTN_Search = hWndbtnser;
+
+        //        //帐号信息选项组
+        //        IntPtr hWndaccinfo = IntPtr.Zero;//FindWindowEx(hWndaccpwd, IntPtr.Zero, "", "帐号信息");//TGroupBox
+        //        IntPtr CtrlNotifySink = IntPtr.Zero;
+        //        CtrlNotifySink = FindWindowEx(hWndaccpwd, IntPtr.Zero, "TButton", null);
+        //        for (int i = 1; i <= 4; i++)
+        //        {
+        //            //CtrlNotifySink = FindWindowEx(hWndaccpwd, CtrlNotifySink, "TButton", null);
+        //            CtrlNotifySink = FindWindowEx(hWndaccpwd, CtrlNotifySink, "TGroupBox", null);
+        //            if (CtrlNotifySink != IntPtr.Zero)
+        //            {
+        //                hWndaccinfo = CtrlNotifySink;
+        //                break;
+        //            }
+        //        }
+        //        if (hWndaccinfo == IntPtr.Zero)
+        //        {
+        //            return "[帐号信息选项卡]未找到";
+        //        }
+        //        IntPtr hW_cb_modify = FindWindowEx(hWndaccinfo, IntPtr.Zero, "TCheckBox", "修改帐号信息");
+        //        if (hWndaccinfo == IntPtr.Zero)
+        //            return "[修改帐号信息选项卡]未找到"; ;
+
+        //        //帐号:密码 生日 问题1 答案1 问题2 答案2   用冒号隔开的
+        //        IntPtr edit = IntPtr.Zero;
+        //        edit = FindWindowEx(hWndaccinfo, IntPtr.Zero, "TEdit", null);
+        //        List<int> editidx = new List<int>();
+        //        editidx.Add(15);//帐号
+        //        editidx.Add(14);//密码
+        //        editidx.Add(11);//生日
+        //        editidx.Add(10);//问题1
+        //        editidx.Add(9);//答案1
+        //        editidx.Add(8);//问题2
+        //        editidx.Add(7);//答案2
+        //        editidx.Add(3);//两步验证更新为空
+
+        //        #region 获取文本框
+        //        for (int i = 1; i <= 17; i++)
+        //        {
+        //            edit = FindWindowEx(hWndaccinfo, edit, "TEdit", null);
+        //            if (edit != IntPtr.Zero)
+        //            {
+        //                if (editidx.Contains(i))
+        //                {
+        //                    switch (i)
+        //                    {
+        //                        case 1:
+        //                            //更新时间[只读]
+        //                            break;
+        //                        case 2:
+        //                            //电话
+        //                            break;
+        //                        case 3:
+        //                            //两步验证
+        //                            winHandle.E_Two = edit;
+        //                            break;
+        //                        case 4:
+        //                            //电子邮箱
+        //                            break;
+        //                        case 5:
+        //                            //备注一
+        //                            break;
+        //                        case 6:
+        //                            //移动电话
+        //                            break;
+        //                        case 7:
+        //                            //答案二
+        //                            winHandle.E_Ans2 = edit;
+        //                            break;
+        //                        case 8:
+        //                            //问题二
+        //                            winHandle.E_Que2 = edit;
+        //                            break;
+        //                        case 9:
+        //                            //答案一
+        //                            winHandle.E_Ans1 = edit;
+        //                            break;
+        //                        case 10:
+        //                            //问题一
+        //                            winHandle.E_Que1 = edit;
+        //                            break;
+        //                        case 11:
+        //                            //生日
+        //                            winHandle.E_Bir = edit;
+        //                            break;
+        //                        case 12:
+        //                            //推广号
+        //                            break;
+        //                        case 13:
+        //                            //用户名称
+        //                            break;
+        //                        case 14:
+        //                            //密码
+        //                            winHandle.E_Pwd = edit;
+        //                            break;
+        //                        case 15:
+        //                            //帐号[只读]
+        //                            winHandle.E_Acct = edit;
+        //                            break;
+        //                        case 16:
+        //                            //
+        //                            break;
+        //                        case 17:
+        //                            //创建时间[只读]
+        //                            break;
+        //                        default:
+        //                            break;
+        //                    }
+        //                }
+        //            }
+        //        }
+        //        #endregion
+
+        //        return "";
+
+        //        //ShowWindow(hWnd2, 0);
+        //        //如Button控件的类名：
+        //        //WindowsForms10.BUTTON.app.0.14fd2b5       WindowsForms10.BUTTON.app.0.21af1a5
+        //        //WindowsForms10.BUTTON.app.0.3ee13a2
+        //        //Button.Text="确定";
+        //        //其中ShowWindow(IntPtr hwnd, int nCmdShow);
+        //        //nCmdShow的含义
+        //        //0    关闭窗口
+        //        //1    正常大小显示窗口
+        //        //2    最小化窗口
+        //        //3    最大化窗口
+
+        //        //IntPtr waybill = GetWindow(waybillIntPtr, (int)WindowSearch.GW_HWNDNEXT);
+        //        //SendMessage(waybill, WM_SETTEXT, IntPtr.Zero, waybillValue);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return "错误: " + ex.Message;
+        //    }
+        //}
+
+
+        private List<IntPtr> clickYes(IntPtr parentHwnd)
         {
-            string mdres = "";
-            try
+            List<IntPtr> hds = new List<IntPtr>();
+            IntPtr hWnddia = FindWindow("#32770", "提示信息");
+            while (hWnddia != IntPtr.Zero)
             {
-                winHandle = new WinHandle();
-                if (MAIN_HANDLE == IntPtr.Zero)
+                IntPtr hWowner = GetWindow(hWnddia, (int)WindowSearch.GW_OWNER);
+                if (hWowner == parentHwnd)
                 {
-                    mdres = "错误: 该配置路径对应的BLUE控制台未找到";
-                    //SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", mdres });
-                    return mdres;
+                    hds.Add(hWnddia);
+                    break;
                 }
-                IntPtr hWndPageControl = FindWindowEx(MAIN_HANDLE, IntPtr.Zero, "TPageControl", "");
-                IntPtr hWndTabSheet = FindWindowEx(hWndPageControl, IntPtr.Zero, "TTabSheet", "帐号管理");
-                if (hWndTabSheet == IntPtr.Zero)
-                {
-                    return "[帐号管理选项卡]未找到";
-                }
-                IntPtr hWndaccpwd = FindWindowEx(hWndTabSheet, IntPtr.Zero, "TGroupBox", "登录帐号密码");
-                if (hWndaccpwd == IntPtr.Zero)
-                {
-                    return "[登录帐号密码选项卡]未找到";
-                }
-
-                //文本框帐号信息
-                IntPtr hWndacc = FindWindowEx(hWndaccpwd, IntPtr.Zero, "TEdit", "");
-                if (hWndacc == IntPtr.Zero)
-                    return "[文本框帐号]未找到";
-                //搜索按钮
-                IntPtr hWndbtnser = FindWindowEx(hWndaccpwd, IntPtr.Zero, "TButton", "搜索(&S)");
-                if (hWndacc == IntPtr.Zero)
-                    return "[搜索按钮]未找到";
-                //确定按钮
-                IntPtr hWndbtnok = FindWindowEx(hWndaccpwd, IntPtr.Zero, "TButton", "确定(&O)");
-                if (hWndacc == IntPtr.Zero)
-                    return "[确定按钮]未找到";
-                winHandle.IN_Acct = hWndacc;
-                winHandle.BTN_OK = hWndbtnok;
-                winHandle.BTN_Search = hWndbtnser;
-
-                //帐号信息选项组
-                IntPtr hWndaccinfo = IntPtr.Zero;//FindWindowEx(hWndaccpwd, IntPtr.Zero, "", "帐号信息");//TGroupBox
-                IntPtr CtrlNotifySink = IntPtr.Zero;
-                CtrlNotifySink = FindWindowEx(hWndaccpwd, IntPtr.Zero, "TButton", null);
-                for (int i = 1; i <= 4; i++)
-                {
-                    //CtrlNotifySink = FindWindowEx(hWndaccpwd, CtrlNotifySink, "TButton", null);
-                    CtrlNotifySink = FindWindowEx(hWndaccpwd, CtrlNotifySink, "TGroupBox", null);
-                    if (CtrlNotifySink != IntPtr.Zero)
-                    {
-                        hWndaccinfo = CtrlNotifySink;
-                        break;
-                    }
-                }
-                if (hWndaccinfo == IntPtr.Zero)
-                {
-                    return "[帐号信息选项卡]未找到";
-                }
-                IntPtr hW_cb_modify = FindWindowEx(hWndaccinfo, IntPtr.Zero, "TCheckBox", "修改帐号信息");
-                if (hWndaccinfo == IntPtr.Zero)
-                    return "[修改帐号信息选项卡]未找到"; ;
-
-                //帐号:密码 生日 问题1 答案1 问题2 答案2   用冒号隔开的
-                IntPtr edit = IntPtr.Zero;
-                edit = FindWindowEx(hWndaccinfo, IntPtr.Zero, "TEdit", null);
-                List<int> editidx = new List<int>();
-                editidx.Add(15);//帐号
-                editidx.Add(14);//密码
-                editidx.Add(11);//生日
-                editidx.Add(10);//问题1
-                editidx.Add(9);//答案1
-                editidx.Add(8);//问题2
-                editidx.Add(7);//答案2
-                editidx.Add(3);//两步验证更新为空
-
-                #region 获取文本框
-                for (int i = 1; i <= 17; i++)
-                {
-                    edit = FindWindowEx(hWndaccinfo, edit, "TEdit", null);
-                    if (edit != IntPtr.Zero)
-                    {
-                        if (editidx.Contains(i))
-                        {
-                            switch (i)
-                            {
-                                case 1:
-                                    //更新时间[只读]
-                                    break;
-                                case 2:
-                                    //电话
-                                    break;
-                                case 3:
-                                    //两步验证
-                                    winHandle.E_Two = edit;
-                                    break;
-                                case 4:
-                                    //电子邮箱
-                                    break;
-                                case 5:
-                                    //备注一
-                                    break;
-                                case 6:
-                                    //移动电话
-                                    break;
-                                case 7:
-                                    //答案二
-                                    winHandle.E_Ans2 = edit;
-                                    break;
-                                case 8:
-                                    //问题二
-                                    winHandle.E_Que2 = edit;
-                                    break;
-                                case 9:
-                                    //答案一
-                                    winHandle.E_Ans1 = edit;
-                                    break;
-                                case 10:
-                                    //问题一
-                                    winHandle.E_Que1 = edit;
-                                    break;
-                                case 11:
-                                    //生日
-                                    winHandle.E_Bir = edit;
-                                    break;
-                                case 12:
-                                    //推广号
-                                    break;
-                                case 13:
-                                    //用户名称
-                                    break;
-                                case 14:
-                                    //密码
-                                    winHandle.E_Pwd = edit;
-                                    break;
-                                case 15:
-                                    //帐号[只读]
-                                    winHandle.E_Acct = edit;
-                                    break;
-                                case 16:
-                                    //
-                                    break;
-                                case 17:
-                                    //创建时间[只读]
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                    }
-                }
-                #endregion
-
-                return "";
-
-                //ShowWindow(hWnd2, 0);
-                //如Button控件的类名：
-                //WindowsForms10.BUTTON.app.0.14fd2b5       WindowsForms10.BUTTON.app.0.21af1a5
-                //WindowsForms10.BUTTON.app.0.3ee13a2
-                //Button.Text="确定";
-                //其中ShowWindow(IntPtr hwnd, int nCmdShow);
-                //nCmdShow的含义
-                //0    关闭窗口
-                //1    正常大小显示窗口
-                //2    最小化窗口
-                //3    最大化窗口
-
-                //IntPtr waybill = GetWindow(waybillIntPtr, (int)WindowSearch.GW_HWNDNEXT);
-                //SendMessage(waybill, WM_SETTEXT, IntPtr.Zero, waybillValue);
+                hWnddia = FindWindowEx(IntPtr.Zero, hWnddia, "#32770", "提示信息");
             }
-            catch (Exception ex)
-            {
-                return "错误: " + ex.Message;
-            }
+
+            
+            return hds;
         }
 
 
@@ -2086,6 +2247,16 @@ namespace Mon
             Pwd = vpwd;
         }
 
+        public string getKey()
+        {
+            return IP + "_" + Port + "_" + Pwd;
+        }
+
+        public string getKey127()
+        {
+            return "127.0.0.1_" + Port + "_" + Pwd;
+        }
+
     }
 
     public class WinHandleMan
@@ -2124,6 +2295,10 @@ namespace Mon
             public IntPtr LE_IP = IntPtr.Zero;
             public IntPtr LE_Port = IntPtr.Zero;
             public IntPtr LE_Pwd = IntPtr.Zero;
+            public string IP = "";
+            public string Port = "";
+            public string Pwd = "";
+
         }
 
     }
