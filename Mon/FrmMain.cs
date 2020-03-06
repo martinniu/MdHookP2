@@ -159,8 +159,8 @@ namespace Mon
         //public int SearchSecs = 10;
         public bool Auto = true;
         public string SerKey = "MirServer";
-        public int MonSecs = 2;
-        public int SearchSecs = 10;
+        public int MonSecs = 10;
+        public int SearchSecs = 30;
         public List<string> Folders = new List<string>();
         public string SerSubPath = "Mir200\\Envir\\QuestDiary\\帐号担保";
         public string SPLIT = "`";
@@ -188,6 +188,8 @@ namespace Mon
         /// 1.1 20191231 创建
         /// </summary>
 
+        //版本信息
+        //2.0.0.1  20200303发布第一版软件
         public FrmMain()
         {
             InitializeComponent();
@@ -555,9 +557,10 @@ namespace Mon
 
         private void sbtn_r_Click(object sender, EventArgs e)
         {
-            Mon_BD();
-            //timer_search.Start();
-            //AutoStartBD();
+            //Mon_BD();
+            timer_search.Start();
+            Search();
+            AutoStartBD();
         }
 
         private void sbtn_rstop_Click(object sender, EventArgs e)
@@ -789,15 +792,16 @@ namespace Mon
 
                     for (int k = 0; k < acctxg.Count; k++)
                     {
-                        string res = modifyInfo(winKey,acctxg[k]);
-                        if (res.Contains("帐号更新成功"))
+                        SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "路径[" + Folders[i] + "]  修改信息[ " + acctxg[k].toString() + " ]" });
+                        string res = modifyInfo(winKey, acctxg[k]);
+                        if (res.Contains("账号信息修改成功"))
                         {
-                            res = "修改帐号[" + acctxg[k].acct + "]-成功  " + res;
+                            res = "修改账号[" + acctxg[k].acct + "]-成功  " + res;
                             msucc++;
                         }
                         else
                         {
-                            res = "修改帐号[" + acctxg[k].acct + "]-失败  " + res;
+                            res = "修改账号[" + acctxg[k].acct + "]-失败  " + res;
                         }
                         SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", res });
                         if (acctxg.Count > 1)
@@ -805,7 +809,7 @@ namespace Mon
                     }
                     if (acctxg.Count > 0)
                     {
-                        //WriteFile(file, "");
+                        WriteFile(file, "");
                         if (msucc > 0)
                             SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", "修改账号信息完成: " + msucc.ToString() });
                     }
@@ -1156,13 +1160,19 @@ namespace Mon
 
                 //SendMessage(winHandle.BTN_OK, WM_CLICK, IntPtr.Zero, "");//点击确定更新
                 PostMessage(winHandles[winKey].BTN_Mdy, WM_CLICK, IntPtr.Zero, "");//点击确定更新
+                Thread.Sleep(200);
                 while (true)
                 {
                     //捕获  是否确认要修改账号  对黄框
-
-                    mdres = getDialogText(winHandles[winKey].Main);
-                    if (mdres != "")
-                        break;
+                    string cres = clickYes(winHandles[winKey].Main);
+                    SetControlPropertyDlgt(new string[] { "ListBox", "lb_bd", "ItemsAdd", cres });
+                    if (cres != "")
+                    {
+                        Thread.Sleep(200);
+                        mdres = getDialogText(winHandles[winKey].Main);
+                        if (mdres != "")
+                            break;
+                    }
                     Thread.Sleep(50);
                 }
             }
@@ -1415,8 +1425,9 @@ namespace Mon
         //}
 
 
-        private List<IntPtr> clickYes(IntPtr parentHwnd)
+        private string clickYes(IntPtr parentHwnd)
         {
+            string mres = "";
             List<IntPtr> hds = new List<IntPtr>();
             IntPtr hWnddia = FindWindow("#32770", "提示信息");
             while (hWnddia != IntPtr.Zero)
@@ -1425,13 +1436,40 @@ namespace Mon
                 if (hWowner == parentHwnd)
                 {
                     hds.Add(hWnddia);
-                    break;
+                }
+                hWowner = GetWindow(hWnddia, (int)WindowSearch.GW_HWNDNEXT);
+                if (hWowner == parentHwnd)
+                {
+                    hds.Add(hWnddia);
+                }
+                hWowner = GetWindow(hWnddia, (int)WindowSearch.GW_HWNDPREV);
+                if (hWowner == parentHwnd)
+                {
+                    hds.Add(hWnddia);
+                    //break;
                 }
                 hWnddia = FindWindowEx(IntPtr.Zero, hWnddia, "#32770", "提示信息");
             }
+            for (int i = 0; i < hds.Count; i++)
+            {
+                IntPtr hWnddiainfo = FindWindowEx(hds[i], IntPtr.Zero, "Static", null);
+                hWnddiainfo = FindWindowEx(hds[i], hWnddiainfo, "Static", null);
+                string text = getHandleText(hWnddiainfo);
+                //keybd_event((byte)Keys.Escape, 0, 0, 0);
+                //keybd_event((byte)Keys.Escape, 0, 2, 0);
+                if (text.StartsWith("是否确认要修改账号"))
+                {
+                    mres += "提示信息[修改确认]" + ": " + text;
+                    IntPtr hWnddiabtn = FindWindowEx(hds[i], IntPtr.Zero, "Button", "是(&Y)");
+                    if (hWnddiabtn != IntPtr.Zero)
+                    {
+                        SetForegroundWindow(hds[i]);
+                        PostMessage(hWnddiabtn, WM_CLICK, IntPtr.Zero, "");//点击确定更新
 
-            
-            return hds;
+                    }
+                }
+            }
+            return mres;
         }
 
 
@@ -1447,6 +1485,18 @@ namespace Mon
                     hds.Add(hWnddia);
                     break;
                 }
+                hWowner = GetWindow(hWnddia, (int)WindowSearch.GW_HWNDNEXT);
+                if (hWowner == parentHwnd)
+                {
+                    hds.Add(hWnddia);
+                    break;
+                }
+                hWowner = GetWindow(hWnddia, (int)WindowSearch.GW_HWNDPREV);
+                if (hWowner == parentHwnd)
+                {
+                    hds.Add(hWnddia);
+                    break;
+                }
                 hWnddia = FindWindowEx(IntPtr.Zero, hWnddia, "#32770", "错误信息");
             }
 
@@ -1456,6 +1506,18 @@ namespace Mon
                 while (hWnddia != IntPtr.Zero)
                 {
                     IntPtr hWowner = GetWindow(hWnddia, (int)WindowSearch.GW_OWNER);
+                    if (hWowner == parentHwnd)
+                    {
+                        hds.Add(hWnddia);
+                        break;
+                    }
+                    hWowner = GetWindow(hWnddia, (int)WindowSearch.GW_HWNDNEXT);
+                    if (hWowner == parentHwnd)
+                    {
+                        hds.Add(hWnddia);
+                        break;
+                    }
+                    hWowner = GetWindow(hWnddia, (int)WindowSearch.GW_HWNDPREV);
                     if (hWowner == parentHwnd)
                     {
                         hds.Add(hWnddia);
@@ -1478,7 +1540,7 @@ namespace Mon
                 StringBuilder title1 = new StringBuilder(buffer_size);
                 SendMessage(hds[i], WM_GETTEXT, buffer_size, title1);
                 IntPtr hWnddiainfo = FindWindowEx(hds[i], IntPtr.Zero, "Static", null);
-                hWnddiainfo = FindWindowEx(hds[i], hWnddiainfo, "Static", null);
+                //hWnddiainfo = FindWindowEx(hds[i], hWnddiainfo, "Static", null);
                 StringBuilder txt = new StringBuilder(buffer_size);
                 SendMessage(hWnddiainfo, WM_GETTEXT, buffer_size, txt);
                 text = title1.ToString() + ":" + txt.ToString();
@@ -2402,6 +2464,11 @@ namespace Mon
             ans1 = vans1;
             que2 = vque2;
             ans2 = vans2;
+        }
+
+        public string toString()
+        {
+            return "帐号:" + acct + ",密码:" + pwd + ",生日:" + bir + ",问题1:" + que1 + ",答案1:" + ans1+ ",问题2:" + que2 + ",答案2:" + ans2;
         }
     }
 

@@ -37,10 +37,10 @@
             this.lb_bd = new System.Windows.Forms.ListBox();
             this.cb_auto = new System.Windows.Forms.CheckBox();
             this.panel1 = new System.Windows.Forms.Panel();
-            this.sbtn_browser = new CCWin.SkinControl.SkinButton();
-            this.folderBrowserDialog1 = new System.Windows.Forms.FolderBrowserDialog();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
             this.tb_r = new System.Windows.Forms.TextBox();
+            this.sbtn_browser = new CCWin.SkinControl.SkinButton();
+            this.folderBrowserDialog1 = new System.Windows.Forms.FolderBrowserDialog();
             this.panel1.SuspendLayout();
             this.splitContainer1.Panel1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
@@ -138,22 +138,6 @@
             this.panel1.Size = new System.Drawing.Size(888, 555);
             this.panel1.TabIndex = 3;
             // 
-            // sbtn_browser
-            // 
-            this.sbtn_browser.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.sbtn_browser.BackColor = System.Drawing.Color.Transparent;
-            this.sbtn_browser.ControlState = CCWin.SkinClass.ControlState.Normal;
-            this.sbtn_browser.DownBack = null;
-            this.sbtn_browser.Location = new System.Drawing.Point(97, 6);
-            this.sbtn_browser.MouseBack = null;
-            this.sbtn_browser.Name = "sbtn_browser";
-            this.sbtn_browser.NormlBack = null;
-            this.sbtn_browser.Size = new System.Drawing.Size(88, 23);
-            this.sbtn_browser.TabIndex = 0;
-            this.sbtn_browser.Text = "搜索目录";
-            this.sbtn_browser.UseVisualStyleBackColor = false;
-            this.sbtn_browser.Click += new System.EventHandler(this.sbtn_browser_Click);
-            // 
             // splitContainer1
             // 
             this.splitContainer1.Dock = System.Windows.Forms.DockStyle.Bottom;
@@ -181,6 +165,22 @@
             this.tb_r.Size = new System.Drawing.Size(370, 518);
             this.tb_r.TabIndex = 3;
             // 
+            // sbtn_browser
+            // 
+            this.sbtn_browser.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.sbtn_browser.BackColor = System.Drawing.Color.Transparent;
+            this.sbtn_browser.ControlState = CCWin.SkinClass.ControlState.Normal;
+            this.sbtn_browser.DownBack = null;
+            this.sbtn_browser.Location = new System.Drawing.Point(97, 6);
+            this.sbtn_browser.MouseBack = null;
+            this.sbtn_browser.Name = "sbtn_browser";
+            this.sbtn_browser.NormlBack = null;
+            this.sbtn_browser.Size = new System.Drawing.Size(88, 23);
+            this.sbtn_browser.TabIndex = 0;
+            this.sbtn_browser.Text = "搜索目录";
+            this.sbtn_browser.UseVisualStyleBackColor = false;
+            this.sbtn_browser.Click += new System.EventHandler(this.sbtn_browser_Click);
+            // 
             // FrmMain
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
@@ -191,7 +191,7 @@
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Name = "FrmMain";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "BLUE账号信息修改工具";
+            this.Text = "账号信息修改工具";
             this.Load += new System.EventHandler(this.Form1_Load);
             this.panel1.ResumeLayout(false);
             this.panel1.PerformLayout();

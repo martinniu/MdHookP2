@@ -3,10 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.21005.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MdHook", "MdHook\MdHook.csproj", "{B79CB75D-72C6-4701-97B8-352BB22B3E02}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Win", "Win\Win.csproj", "{92897AC2-EBAF-4686-985A-51244B440F64}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mon", "Mon\Mon.csproj", "{048F8925-1724-440B-A909-672B0331D9CC}"
 EndProject
 Global
@@ -15,14 +11,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{B79CB75D-72C6-4701-97B8-352BB22B3E02}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B79CB75D-72C6-4701-97B8-352BB22B3E02}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B79CB75D-72C6-4701-97B8-352BB22B3E02}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B79CB75D-72C6-4701-97B8-352BB22B3E02}.Release|Any CPU.Build.0 = Release|Any CPU
-		{92897AC2-EBAF-4686-985A-51244B440F64}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{92897AC2-EBAF-4686-985A-51244B440F64}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{92897AC2-EBAF-4686-985A-51244B440F64}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{92897AC2-EBAF-4686-985A-51244B440F64}.Release|Any CPU.Build.0 = Release|Any CPU
 		{048F8925-1724-440B-A909-672B0331D9CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{048F8925-1724-440B-A909-672B0331D9CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{048F8925-1724-440B-A909-672B0331D9CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
